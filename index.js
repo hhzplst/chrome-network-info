@@ -3,9 +3,15 @@ var app = express();
 var port = process.env.PORT || 8000;
 
 const CDP = require('chrome-remote-interface');
+const chromeLauncher = require('chrome-launcher');
 
 app.get('/', function(req, res) {
-  res.send("psss");
+  chromeLauncher.launch({
+    startingUrl: 'http://gap.com',
+    chromeFlags: ['--headless']
+  }).then(chrome => {
+    res.send(`Chrome debugging port running on ${chrome.port}`);
+  });
 });
 
 app.listen(port, function() {
