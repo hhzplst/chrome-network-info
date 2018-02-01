@@ -1,80 +1,72 @@
-var express = require('express');
-var app = express();
-var port = process.env.PORT || 8000;
-
+const express = require('express');
+const port = process.env.PORT || 8000;
 const CDP = require('chrome-remote-interface');
-const chromeLauncher = require('chrome-launcher');
 
-app.get('/', function(req, res) {
-  (async function() {
-    async function launchChrome() {
-      return await chromeLauncher.launch({
-        chromeFlags: [
-          '--headless'
-        ]
-      });
+async function getData(url) {
+    let tab;
+    let total_size = 0;
+    try {
+        tab = await CDP.New();
+        const client = await CDP({tab});
+        const {Page, Emulation, Network} = client;
+        Network.responseReceived(({type, response}) => {
+            if(type == 'Image') {
+              let contentLength = (typeof response.headers['Content-Length'] === 'undefined')? 0 : Number.parseInt(response.headers['Content-Length']);
+              let encodedLength = response.encodedDataLength;
+              let curSize = Math.round((contentLength + encodedLength) / 1024 * 10) / 10;
+
+              total_size += curSize;
+            }
+        });
+        await Page.enable();
+        await Network.enable();
+        await Network.setCacheDisabled({cacheDisabled: true});
+        //Laptop MDPI screen
+        await Emulation.setDeviceMetricsOverride({
+          'width': 1280,
+          'height': 800,
+          'deviceScaleFactor': 1,
+          'mobile': false
+        });
+        await Network.setUserAgentOverride({userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36'});
+        await Promise.all([
+            Page.navigate({url}),
+            Page.loadEventFired()
+        ]);
+        console.log(`Done with ${url}`);
+        return Promise.resolve({url, total_size});
+    } catch (err) {
+        throw err;
+    } finally {
+        if (tab) {
+            CDP.Close({id: tab.id});
+        }
     }
-    const chrome = await launchChrome();
-    const protocol = await CDP({
-      port: chrome.port
-    });
+}
 
-    const {
-      DOM,
-      Page,
-      Emulation,
-      Network,
-      Runtime
-    } = protocol;
-    await Promise.all([DOM.enable(), Page.enable(), Network.enable(), Runtime.enable()]);
+const app = express();
 
-    await Network.setCacheDisabled({cacheDisabled: true});
+app.get('/', async function (req, res) {
 
-    // Network.requestWillBeSent(params => {
-    //   const type = params.type;
-    //   if(type != 'Image')
-    //     return;
-    // });
+    const urls = ['http://athleta.gap.com',
+                  'http://oldnavy.gap.com',
+                  'http://www.gap.com',
+                  'http://bananarepublic.gap.com'];
 
-    var total_size = 0;
-
-    Network.responseReceived(({type, response}) => {
-      if(type == 'Image') {
-        let contentLength = (typeof response.headers['Content-Length'] === 'undefined')? 0 : Number.parseInt(response.headers['Content-Length']);
-        let encodedLength = response.encodedDataLength;
-        let curSize = Math.round((contentLength + encodedLength) / 1024 * 10) / 10;
-
-        total_size += curSize;
-      }
-    });
-
-    Page.loadEventFired(params => {
-      console.log("in loadEventFired, total_size is, ", Math.round(total_size * 10) / 10);
-    });
-    
-    //Laptop MDPI screen
-    await Emulation.setDeviceMetricsOverride({
-      'width': 1280,
-      'height': 800,
-      'deviceScaleFactor': 1,
-      'mobile': false
-    });
-    await Network.setUserAgentOverride({userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36'});
-    Page.navigate({
-        url: 'http://athleta.gap.com/'
-    });
-
-    //Nexus 6p
-    // await Emulation.setDeviceMetricsOverride({
-    //   'width': 412,
-    //   'height': 731,
-    //   'deviceScaleFactor': 1,
-    //   mobile: true
-    // });
-    // await Network.setUserAgentOverride({userAgent: 'Mozilla/5.0 (Linux; Android 5.1.1; Nexus 6 Build/LYZ28E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Mobile Safari/537.36'});
-  })();
+    try {
+        const handlers = await Promise.all(urls.map(setInterval(getData, 6000)));
+        handlers.forEach(function(item, i) {
+            res.write('<html><head></head><body>');
+            res.write('<p>' + item.url + " : " + Math.round(item.total_size * 10) / 10 + '</p>' );
+            res.write('<br>');
+        });
+    } catch (err) {
+        console.error(err);
+    } finally {
+        res.end('</body></html>');
+    }
 });
 
-app.listen(port, function() {
-  console.log("server's running on port " + port);
+app.listen(port, function () {
+    console.log("server's running on port " + port);
 });

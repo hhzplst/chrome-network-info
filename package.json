@@ -4,14 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon --inspect=9222 index.js",
+    "start": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "chrome-launcher": "^0.10.2",
     "chrome-remote-interface": "^0.25.5",
     "express": "^4.16.2",
     "morgan": "^1.9.0"
