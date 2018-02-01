@@ -1,0 +1,1 @@
+![Alt text](../tool-in-action.gif "Tool in Action")
